@@ -2,7 +2,7 @@ from airflow import DAG
 from datetime import timedelta, datetime
 from airflow.providers.http.sensors.http import HttpSensor
 import json
-from airflow.providers.http.operators.http import SimpleHttpOperator
+from airflow.providers.http.operators.http import HttpOperator
 from airflow.operators.python import PythonOperator
 import pandas as pd
 
@@ -25,9 +25,9 @@ def transform_load_data(task_instance):
     pressure = data["main"]["pressure"]
     humidity = data["main"]["humidity"]
     wind_speed = data["wind"]["speed"]
-    time_of_record = datetime.utcfromtimestamp(data['dt'] + data['timezone'])
-    sunrise_time = datetime.utcfromtimestamp(data['sys']['sunrise'] + data['timezone'])
-    sunset_time = datetime.utcfromtimestamp(data['sys']['sunset'] + data['timezone'])
+    time_of_record = datetime.fromtimestamp(data['dt'], data['timezone'])
+    sunrise_time = datetime.fromtimestamp(data['sys']['sunrise'], data['timezone'])
+    sunset_time = datetime.fromtimestamp(data['sys']['sunset'], data['timezone'])
 
     transformed_data = {"City": city,
                         "Description": weather_description,
@@ -49,7 +49,8 @@ def transform_load_data(task_instance):
     now = datetime.now()
     dt_string = now.strftime("%d%m%Y%H%M%S")
     dt_string = 'current_weather_data_portland_' + dt_string
-    df_data.to_csv(f"s3://weatherapiairflowyoutubebucket-yml/{dt_string}.csv", index=False, storage_options=aws_credentials)
+    # df_data.to_csv(f"s3://weatherapiairflowyoutubebucket-yml/{dt_string}.csv", index=False, storage_options=aws_credentials)
+    df_data.to_csv(f"{dt_string}.csv", index=False)
 
 
 
@@ -75,14 +76,14 @@ with DAG('weather_dag',
         is_weather_api_ready = HttpSensor(
         task_id ='is_weather_api_ready',
         http_conn_id='weathermap_api',
-        endpoint='/data/2.5/weather?q=Portland&APPID=5031cde3d1a8b9469fd47e998d7aef79'
+        endpoint='/data/3.0/onecall?q=Portland&appid=b7a5edb71aee06d68f3661060d3d5d20'
         )
 
 
-        extract_weather_data = SimpleHttpOperator(
+        extract_weather_data = HttpOperator(
         task_id = 'extract_weather_data',
         http_conn_id = 'weathermap_api',
-        endpoint='/data/2.5/weather?q=Portland&APPID=5031cde3d1a8b9469fd47e998d7aef79',
+        endpoint='/data/3.0/onecall?q=Portland&appid=b7a5edb71aee06d68f3661060d3d5d20',
         method = 'GET',
         response_filter= lambda r: json.loads(r.text),
         log_response=True
@@ -92,7 +93,6 @@ with DAG('weather_dag',
         task_id= 'transform_load_weather_data',
         python_callable=transform_load_data
         )
-
 
 
 
